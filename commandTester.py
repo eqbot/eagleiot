@@ -16,6 +16,6 @@ t.start()
 
 #test.run(commandloop, None)
 ser = commands.ser
-ser.write(b'\x00')
+ser.write(b'\xFF')
 print(ser.readline())
-ser.write(b'\x0A')
+ser.write(b'\xF0')

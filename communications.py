@@ -25,6 +25,7 @@ t.start()
 
 learning = False
 learncmdName = ""
+learndevice = ""
 
 def reconnect(ws):
     if ws is not None:
@@ -48,10 +49,11 @@ def doCommand(ws, msg):
         commands.learn_command()
         learning = True
         learncmdName = jsonblob['name']
+        learndevice = jsonblob['id']
     devname = json.loads(msg)['id']
-    command = commandDict[command]
+    command = commandDict[(command,devname)]
     if command is not None:
-        command.run(commandloop, devname)
+        command.run(commandloop)
 
 def on_close(ws):
     print("connection end")
