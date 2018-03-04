@@ -3,9 +3,16 @@ import asyncio
 import serial
 import ssl
 import json
+import sys, select
+import os
+import commands
 from commands import commandDict
 from threading import Thread
 from uuid import getnode as get_mac
+
+learning = False
+learncmdName = ""
+learndevice = None
 
 #websocket setup
 HOSTNAME = 'wss://eagleiot.net'
@@ -23,9 +30,6 @@ commandloop = asyncio.new_event_loop()
 t = Thread(target=start_loop, args=(commandloop,))
 t.start()
 
-learning = False
-learncmdName = ""
-learndevice = ""
 
 def reconnect(ws):
     if ws is not None:
@@ -33,6 +37,7 @@ def reconnect(ws):
     ws = websocket.WebSocketApp(HOSTNAME, on_message=doCommand, on_close=on_close, on_error=on_error)
 
 def doCommand(ws, msg):
+    global learning, learncmdName, learndevice
     jsonblob = json.loads(msg)
     command = jsonblob['command']
     if learning:
@@ -42,18 +47,30 @@ def doCommand(ws, msg):
         if command == "save":
             commands.save_command(learncmdName)
             learning = False
-    if command == "address":
+    elif command == "address":
         ws.send(json.dumps({"command":"address", "address":str(hex(get_mac()))}))
         return
-    if command == "learn":
+    elif command == "learn":
         commands.learn_command()
         learning = True
         learncmdName = jsonblob['name']
         learndevice = jsonblob['id']
-    devname = json.loads(msg)['id']
-    command = commandDict[(command,devname)]
-    if command is not None:
-        command.run(commandloop)
+    elif command == "ListenForNewDevice":
+        name = jsonblob['id']
+        if(commands.tryFindDevice()):
+           ws.send(json.dumps({"command":"FoundNewDevice","address":str(hex(get_mac())),"name":name}))
+        else:
+            print("no device here")
+    elif command == "EstablishOwnership":
+        mac = jsonblob['mac']
+        newid = jsonblob['id']
+        if mac == str(hex(get_mac())):
+            commands.finishPair(newid)
+    else:
+        devname = int(json.loads(msg)['id'])
+        command = commandDict[(command,devname)]
+        if command is not None:
+            command.run(commandloop)
 
 def on_close(ws):
     print("connection end")
@@ -77,3 +94,4 @@ print("I initialized ws")
 #runSocket()
 ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE, "check_hostname": False})
 print("run_forever ended")
+os._exit(0)
