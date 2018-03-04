@@ -1,56 +1,37 @@
-import websockets
+import websocket
 import asyncio
-from bluepy.btle import UUID, Peripheral, Scanner, DefaultDelegate, BTLEException
-from commands import commandDict
+import serial
+from commands import commandDict, execCommand
 
 #websocket setup
 HOSTNAME = 'ws://eagleiot.net'
 
-ws = websockets.client.connect(HOSTNAME)
+#Serial setup
+ser = serial.Serial('/dev/ttyACM0')
 
-#BTLE setup
-temp_uuid = UUID(0x2221)
+def reconnect(ws):
+    if ws is not None:
+        ws.close()
+    ws = websocket.WebSocketApp(HOSTNAME, on_message=doCommand, on_close=on_close, on_error=on_error)
 
-class ScanDelegate(DefaultDelegate):
-    def __init__(self):
-        DefaultDelegate.__init__(self)
-    def handleDiscovery(self, dev, isNewDev, isNewData):
-        if isNewDev:
-            print("Discovered device", dev.addr)
-        elif isNewData:
-            print("Recieved new data from", dev.addr)
-
-scanner = Scanner().withDelegate(ScanDelegate())
-devices = scanner.scan(10.0)
-peripherals = {}
-for device in devices:
-    print(device.getValueText(9))
-    try:
-        peripherals[device.getValueText(9)] = Peripheral(device)
-    except BTLEException:
-        continue
-
-def reconnect():
-    ws = websockets.client.connect(HOSTNAME)
-
-def doCommand(msg):
+def doCommand(ws, msg):
     data = msg.split()
     devname = data[0]
-    command = data[1]
-    args = data[2:]
+    command = commandDict.get(' '.join(data[1:]))
+    command.exec()
 
-async def runloop():
-    while True:
-        try:
-            msg = await asyncio.wait_for(ws.recv(), timeout = 60)
-        except asyncio.TimeoutError:
-            try:
-                pong = await ws.ping()
-                await asyncio.wait_for(pong, timeout = 60)
-            except asyncio.TimeoutError:
-                reconnect()
-        else:
-            doCommand(msg)
+def on_close(ws):
+    print("connection end")
+def runSocket():
+    reconnect(ws)
+    ws.run_forever()
 
+def on_open(ws):
+    ws.send("Hello, I'm a new device!")
 
-asyncio.get_event_loop().run_until_complete(runloop())
+def on_error(ws, error):
+    print(error)
+
+ws = websocket.WebSocketApp(HOSTNAME, on_message=doCommand, on_close=on_close, on_error=on_error)
+
+runSocket()
